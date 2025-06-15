@@ -4,9 +4,6 @@ export async function POST(req) {
     const message = formData.get("message") || '';
     const file = formData.get("file");
 
-    // Optionally handle file (e.g. read it as buffer or text if needed)
-    // const buffer = await file.arrayBuffer();
-
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -20,11 +17,17 @@ export async function POST(req) {
     });
 
     const data = await response.json();
-    const reply = data.choices?.[0]?.message?.content;
 
-    return Response.json({ reply });
+    if (!response.ok) {
+      console.error("OpenRouter API error:", data);
+      return Response.json({ reply: "OpenRouter API error: " + data.error?.message || "Unknown error" });
+    }
+
+    const reply = data.choices?.[0]?.message?.content;
+    return Response.json({ reply: reply || "No response from model." });
+
   } catch (error) {
     console.error("Chat API error:", error);
-    return Response.json({ reply: "Something went wrong." });
+    return Response.json({ reply: "Server error. Try again later." });
   }
 }

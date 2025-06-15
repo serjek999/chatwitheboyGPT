@@ -65,7 +65,7 @@ export default function ChatPage() {
     const isLoggedIn = localStorage.getItem('auth') === 'true'
     if (!isLoggedIn) {
       const usage = parseInt(localStorage.getItem('guest_usage_count') || '0', 10)
-      if (usage >= 50) {
+      if (usage >= 500) {
         alert('You’ve reached the guest limit. Please log in to continue.')
         return
       }

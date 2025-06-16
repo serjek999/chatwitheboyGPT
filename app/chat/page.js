@@ -8,12 +8,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
-import { Plus, Send, Menu, Copy, Square } from 'lucide-react'
+import { Plus, Send, Copy, Square, LayoutGrid } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import TypewriterEffect from '@/components/TypewriterEffect'
 import VerifiedBadge from '@/components/VerifiedBadge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import ChatSidebar from '@/components/ChatSidebar'
 
 export default function ChatPage() {
   const router = useRouter()
@@ -79,23 +79,32 @@ export default function ChatPage() {
       content: previewURL ? `![Uploaded Image](${previewURL})` : input
     }
 
-    const updatedChats = chats.map(chat =>
-      chat.id === currentChatId
-        ? {
-            ...chat,
-            messages: [...chat.messages, newUserMessage],
-            title: chat.messages.length === 0 ? input.slice(0, 30) || 'New Conversation' : chat.title
-          }
-        : chat
-    )
+    const updatedChats = chats.map(chat => {
+      if (chat.id !== currentChatId) return chat
+    
+      const isNew = chat.title === 'New Conversation' || !chat.title
+      const firstUserMessage = input.trim().slice(0, 30)
+    
+      return {
+        ...chat,
+        messages: [...chat.messages, newUserMessage],
+        title: isNew && firstUserMessage ? firstUserMessage : chat.title,
+      }
+    })
+    
+    
     setChats(updatedChats)
     setInput('')
     setFile(null)
     setPreviewURL(null)
     setLoading(true)
 
+    const currentChat = updatedChats.find(c => c.id === currentChatId)
+    const history = currentChat ? currentChat.messages : []
+
     const formData = new FormData()
     formData.append('message', input)
+    formData.append('history', JSON.stringify(history))
     if (file) formData.append('file', file)
 
     controllerRef.current = new AbortController()
@@ -183,54 +192,45 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 flex flex-col items-center">
-      <div className="w-full max-w-4xl space-y-4">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <Menu />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="w-[300px] p-4 space-y-4">
-                <Button className="w-full" onClick={createNewChat}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  New Chat
-                </Button>
-                <div className="border rounded p-2 h-[70vh] overflow-y-auto space-y-2">
-                  {chats.map(chat => (
-                    <div
-                      key={chat.id}
-                      onClick={() => setCurrentChatId(chat.id)}
-                      className={`cursor-pointer p-2 rounded hover:bg-gray-200 ${chat.id === currentChatId ? 'bg-gray-300' : ''}`}
-                    >
-                      <span className="truncate w-full text-sm font-medium">
-                        {chat.title}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </SheetContent>
-            </Sheet>
-            <h1 className="text-2xl font-bold">E-boy GPT</h1>
-          </div>
+    <div className="min-h-screen bg-gray-50 p-4 flex gap-4">
+      <ChatSidebar
+        chats={chats}
+        setChats={setChats}
+        currentChatId={currentChatId}
+        onNewChat={createNewChat}
+        onSelectChat={setCurrentChatId}
+      />
 
+      <div className="flex-1 space-y-4 max-w-4xl mx-auto">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold">E-boy GPT</h1>
           <div className="flex items-center space-x-4">
-            <div className="text-sm text-right">
-              <p className="font-semibold">{user.name}</p>
-              <p className="text-xs text-gray-500">{user.email}</p>
-            </div>
-            <Avatar>
-              <AvatarImage src="https://api.dicebear.com/7.x/initials/svg?seed=User" alt="User" />
-              <AvatarFallback>{user.name?.[0] || 'U'}</AvatarFallback>
-            </Avatar>
-            {user.name === 'Guest' ? (
-              <Button variant="outline" onClick={() => router.push('/login')}>Login</Button>
-            ) : (
-              <Button variant="outline" onClick={handleLogout}>Logout</Button>
-            )}
-          </div>
+  <div className="text-sm text-right">
+    <p className="font-semibold">{user.name}</p>
+    <p className="text-xs text-gray-500">{user.email}</p>
+  </div>
+  
+  <Avatar>
+    <AvatarImage src="https://api.dicebear.com/7.x/initials/svg?seed=User" alt="User" />
+    <AvatarFallback>{user.name?.[0] || 'U'}</AvatarFallback>
+  </Avatar>
+
+  <Button
+    variant="ghost"
+    size="icon"
+    className="text-black"
+    onClick={() => router.push('/tabs')}
+  >
+    <LayoutGrid className="w-5 h-5" />
+  </Button>
+
+  {user.name === 'Guest' ? (
+    <Button variant="outline" onClick={() => router.push('/login')}>Login</Button>
+  ) : (
+    <Button variant="outline" onClick={handleLogout}>Logout</Button>
+  )}
+</div>
+
         </div>
 
         <Card className="p-4 h-[60vh] overflow-y-auto space-y-4">
@@ -248,13 +248,11 @@ export default function ChatPage() {
                       <VerifiedBadge />
                     </div>
                   )}
-
                   {isLastAssistant && msg.role === 'assistant' ? (
                     <TypewriterEffect text={contentWithoutHeader} onDone={() => setLoading(false)} />
                   ) : (
                     <ReactMarkdown>{contentWithoutHeader}</ReactMarkdown>
                   )}
-
                   {msg.role === 'assistant' && (
                     <button
                       className="absolute top-1 right-1 hidden group-hover:block text-gray-400 hover:text-black"

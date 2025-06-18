@@ -1,39 +1,76 @@
+import { NextResponse } from 'next/server'
+import { Buffer } from 'buffer'
+
+export const runtime = 'edge'
+
 export async function POST(req) {
   try {
-    const formData = await req.formData();
-    const message = formData.get("message") || '';
-    const historyJSON = formData.get("history") || '[]';
+    const formData = await req.formData()
+    const message = formData.get('message') || ''
+    const historyJSON = formData.get('history') || '[]'
+    const file = formData.get('file')
+    const history = JSON.parse(historyJSON)
 
-    // Parse full message history from frontend
-    const history = JSON.parse(historyJSON);
+    let imageDataURL = null
+    let isImage = false
 
-    // Add current user message to history
-    history.push({ role: "user", content: message });
-
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "openai/gpt-3.5-turbo",
-        messages: history,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error("OpenRouter API error:", data);
-      return Response.json({ reply: "OpenRouter API error: " + (data.error?.message || "Unknown error") });
+    if (file && file.type.startsWith('image/')) {
+      const buffer = Buffer.from(await file.arrayBuffer())
+      const base64 = buffer.toString('base64')
+      imageDataURL = `data:${file.type};base64,${base64}`
+      isImage = true
     }
 
-    const reply = data.choices?.[0]?.message?.content;
-    return Response.json({ reply: reply || "No response from model." });
+    // Set model depending on whether it's image or text
+    const model = isImage
+      ? 'meta-llama/llama-4-maverick:free'
+      : 'meta-llama/llama-3.3-70b-instruct:free'
+
+    // Choose correct API key based on model
+    const apiKey =
+      model.includes('llama-4') ? process.env.LLAMA4_API_KEY : process.env.LLAMA3_API_KEY
+
+    const userMessage = isImage
+      ? [
+          { type: 'text', text: message || 'Describe this image.' },
+          { type: 'image_url', image_url: { url: imageDataURL } }
+        ]
+      : message
+
+    history.push({ role: 'user', content: userMessage })
+
+    const response = await fetch(process.env.OPENROUTER_BASE_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'http://localhost:3000',
+        'X-Title': 'Chat With Image',
+      },
+      body: JSON.stringify({
+        model,
+        messages: history,
+      }),
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      console.error('OpenRouter API error:', data)
+      return NextResponse.json({
+        reply: 'OpenRouter API error: ' + (data.error?.message || 'Unknown error'),
+      })
+    }
+
+    const reply = data.choices?.[0]?.message
+    return NextResponse.json({
+      reply: reply?.content || 'No response from model.',
+    })
 
   } catch (error) {
-    console.error("Chat API error:", error);
-    return Response.json({ reply: "Server error. Try again later." });
+    console.error('Chat API error:', error)
+    return NextResponse.json({
+      reply: 'Server error. Try again later.',
+    })
   }
 }

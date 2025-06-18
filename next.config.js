@@ -1,8 +1,8 @@
-module.exports = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   experimental: {
-    serverActions: true,
-  },
-  env: {
-    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
-  },
+    serverActions: {} // ✅ correct format
+  }
 }
+
+module.exports = nextConfig

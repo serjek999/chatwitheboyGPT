@@ -1,7 +1,8 @@
+// Use Node.js runtime so Buffer works
+export const runtime = 'nodejs'
+
 import { NextResponse } from 'next/server'
 import { Buffer } from 'buffer'
-
-export const runtime = 'edge'
 
 export async function POST(req) {
   try {
@@ -21,12 +22,10 @@ export async function POST(req) {
       isImage = true
     }
 
-    // Set model depending on whether it's image or text
     const model = isImage
       ? 'meta-llama/llama-4-maverick:free'
       : 'meta-llama/llama-3.3-70b-instruct:free'
 
-    // Choose correct API key based on model
     const apiKey =
       model.includes('llama-4') ? process.env.LLAMA4_API_KEY : process.env.LLAMA3_API_KEY
 

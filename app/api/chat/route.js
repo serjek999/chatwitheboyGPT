@@ -1,4 +1,4 @@
-// Use Node.js runtime so Buffer works
+// Use Node.js runtime so Buffer works on Vercel
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -52,7 +52,17 @@ export async function POST(req) {
       }),
     })
 
-    const data = await response.json()
+    // SAFELY PARSE JSON
+    let data
+    try {
+      data = await response.json()
+    } catch (err) {
+      const text = await response.text()
+      console.error('Non-JSON response from OpenRouter:', response.status, text)
+      return NextResponse.json({
+        reply: `OpenRouter server error (${response.status}): ${text}`,
+      })
+    }
 
     if (!response.ok) {
       console.error('OpenRouter API error:', data)

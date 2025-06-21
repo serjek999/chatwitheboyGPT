@@ -1,30 +1,48 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
-export default function TypewriterEffect({ text, speed = 25 }) {
+export default function TypewriterEffect({ text, speed = 10 }) {
   const [displayed, setDisplayed] = useState('')
-  const [index, setIndex] = useState(0)
+  const indexRef = useRef(0)
+  const timeoutRef = useRef(null)
+  const scrollRef = useRef(null)
 
   useEffect(() => {
     setDisplayed('')
-    setIndex(0)
-  }, [text]) // Reset when text changes
+    indexRef.current = 0
+
+    const typeNext = () => {
+      const nextChar = text.charAt(indexRef.current)
+      setDisplayed((prev) => prev + nextChar)
+      indexRef.current += 1
+
+      if (indexRef.current < text.length) {
+        timeoutRef.current = setTimeout(typeNext, speed)
+      }
+    }
+
+    typeNext() // start typing immediately
+
+    return () => {
+      clearTimeout(timeoutRef.current)
+    }
+  }, [text, speed])
 
   useEffect(() => {
-    if (index < text.length) {
-      const timeout = setTimeout(() => {
-        setDisplayed((prev) => prev + text.charAt(index))
-        setIndex((prev) => prev + 1)
-      }, text.charAt(index) === ' ' ? 10 : speed)
-      return () => clearTimeout(timeout)
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [index, text, speed])
+  }, [displayed])
 
   return (
-    <div className="whitespace-pre-wrap font-mono">
-      {displayed}
-      <span className="animate-pulse">▋</span> {/* blinking cursor */}
+    <div className="whitespace-pre-wrap overflow-hidden">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+        {displayed}
+      </ReactMarkdown>
+      <div ref={scrollRef} />
     </div>
   )
 }

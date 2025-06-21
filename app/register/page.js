@@ -5,11 +5,13 @@ import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Eye, EyeOff } from 'lucide-react'
 
 export default function RegisterPage() {
   const router = useRouter()
   const [form, setForm] = useState({ username: '', email: '', password: '', robot: false })
   const [error, setError] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleRegister = async () => {
     if (!form.robot) return setError('Please verify you are not a robot.')
@@ -53,11 +55,20 @@ export default function RegisterPage() {
           placeholder="Email"
           onChange={(e) => setForm({ ...form, email: e.target.value })}
         />
-        <Input
-          type="password"
-          placeholder="Password"
-          onChange={(e) => setForm({ ...form, password: e.target.value })}
-        />
+        <div className="relative">
+          <Input
+            type={showPassword ? 'text' : 'password'}
+            placeholder="Password"
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+          />
+          <button
+            type="button"
+            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500"
+            onClick={() => setShowPassword(!showPassword)}
+          >
+            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+          </button>
+        </div>
         <div className="flex items-center gap-2">
           <Checkbox id="robot" onCheckedChange={(v) => setForm({ ...form, robot: v })} />
           <label htmlFor="robot" className="text-sm">I&#39;m not a robot</label>

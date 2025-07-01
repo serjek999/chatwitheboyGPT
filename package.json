@@ -28,6 +28,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cookie": "^1.0.2",
+    "eslint-plugin-react": "^7.37.5",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.515.0",
     "next": "15.3.3",

@@ -1,148 +1,152 @@
 'use client'
 
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import VerifiedBadge from '@/components/VerifiedBadge'
-import TypewriterEffect from '@/components/TypewriterEffect'
+import { useEffect, useState } from 'react'
 import { ThumbsUp, ThumbsDown, Copy } from 'lucide-react'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import vscDarkPlus from 'react-syntax-highlighter/dist/cjs/styles/prism/vsc-dark-plus'
-import { useState } from 'react'
+import VerifiedBadge from '@/components/VerifiedBadge'
+import TypewriterEffect from '@/components/TypewriterEffect'
 
 export default function MessageBubble({ msg, index, thumbs, handleThumb, isLast }) {
   const [copied, setCopied] = useState(null)
+  const [hasTyped, setHasTyped] = useState(false)
+
+  useEffect(() => {
+    if (isLast && msg.role === 'assistant') {
+      setHasTyped(true)
+    }
+  }, [isLast, msg.role])
+
+  if (!msg || !msg.role || !msg.content) return null
 
   const hasEboyHeader = msg.content.startsWith('**E-boy**')
-  const sanitizedContent = msg.content.replace('**E-boy**', '').trim()
-  const isCodeReply = sanitizedContent.includes('```')
+  const isWebSearchResult = msg.content.startsWith('**[web]**')
 
-  const baseStyle = 'relative group w-fit max-w-full break-words text-sm'
+  let sanitizedContent = msg.content
+if (hasEboyHeader) sanitizedContent = sanitizedContent.replace('**E-boy**', '')
+if (isWebSearchResult) sanitizedContent = sanitizedContent.replace('**[web]**', '')
+sanitizedContent = sanitizedContent.trim()
+
+
+  // ⛏️ Markdown block parser
+  const parseMarkdownToBlocks = (markdown) => {
+    const lines = markdown.split('\n')
+    const blocks = []
+    let current = { type: 'text', content: '' }
+    let inCode = false
+    let codeLang = ''
+    let codeBuffer = []
+
+    for (let line of lines) {
+      if (line.startsWith('```')) {
+        if (inCode) {
+          blocks.push({ type: 'code', lang: codeLang, content: codeBuffer.join('\n') })
+          codeBuffer = []
+          inCode = false
+          codeLang = ''
+          current = { type: 'text', content: '' }
+        } else {
+          inCode = true
+          codeLang = line.slice(3).trim()
+          if (current.content) blocks.push(current)
+          codeBuffer = []
+        }
+      } else {
+        if (inCode) {
+          codeBuffer.push(line)
+        } else {
+          current.content += line + '\n'
+        }
+      }
+    }
+
+    if (current.content.trim()) blocks.push(current)
+    return blocks
+  }
+
+  const blocks = parseMarkdownToBlocks(sanitizedContent)
+
+  const handleCopy = (text) => {
+    navigator.clipboard.writeText(text)
+    setCopied(index)
+    setTimeout(() => setCopied(null), 1500)
+  }
+
+  const isUser = msg.role === 'user'
+  const baseStyle = 'relative group w-fit break-words text-sm max-w-full'
   const userStyle = 'bg-blue-100 text-blue-800 p-3 rounded-lg'
   const assistantTextStyle = 'text-gray-800'
   const assistantCardStyle = 'bg-gray-900 text-white p-3 rounded-lg'
 
-  const handleCopy = (code, idx) => {
-    navigator.clipboard.writeText(code)
-    setCopied(idx)
-    setTimeout(() => setCopied(null), 2000)
-  }
-
   return (
-    <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
         className={`${baseStyle} ${
-          msg.role === 'user'
+          isUser
             ? userStyle
-            : isCodeReply
+            : sanitizedContent.includes('```')
             ? assistantCardStyle
             : assistantTextStyle
         }`}
+        style={{
+          overflowWrap: 'break-word',
+          wordBreak: 'break-word',
+          maxWidth: '80%',
+          overflowX: 'auto',
+        }}
       >
-        {msg.role === 'assistant' && hasEboyHeader && (
-          <div className="mb-1 flex items-center space-x-2">
-            <strong className="font-bold">E-boy</strong>
-            <VerifiedBadge />
+        {/* ✅ E-boy label */}
+        {msg.role === 'assistant' && (
+  <div className="mb-1 flex items-center space-x-2">
+    {hasEboyHeader && (
+      <>
+        <strong className="font-bold">E-boy</strong>
+        <VerifiedBadge />
+      </>
+    )}
+    {isWebSearchResult && (
+      <span className="text-xs font-semibold bg-blue-100 text-blue-700 px-2 py-1 rounded">
+        🌐 Web Search
+      </span>
+    )}
+  </div>
+)}
+
+
+        {/* ✅ Typing effect only once on the latest assistant message */}
+        {msg.role === 'assistant' && isLast && !hasTyped ? (
+          <TypewriterEffect blocks={blocks} speed={8} />
+        ) : (
+          <div className="prose prose-sm max-w-full dark:prose-invert whitespace-pre-wrap">
+            {blocks.map((block, i) =>
+              block.type === 'code' ? (
+                <div key={i} className="relative my-3 overflow-x-auto max-w-full rounded">
+                  <SyntaxHighlighter
+                    language={block.lang || ''}
+                    style={vscDarkPlus}
+                    customStyle={{
+                      borderRadius: '0.5rem',
+                      padding: '1rem',
+                      backgroundColor: '#1e1e1e',
+                      fontSize: '0.9rem',
+                      margin: 0,
+                      maxHeight: '320px',
+                      overflowX: 'auto',
+                    }}
+                  >
+                    {block.content}
+                  </SyntaxHighlighter>
+                </div>
+              ) : (
+                <p key={i}>{block.content}</p>
+              )
+            )}
           </div>
         )}
 
-        {isLast && msg.role === 'assistant' ? (
-          <TypewriterEffect text={sanitizedContent} speed={5} />
-        ) : (
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              // ✅ Code Block with Syntax Highlight + Copy
-              code({ inline, className, children, ...props }) {
-                const code = String(children).replace(/\n$/, '')
-                const match = /language-(\w+)/.exec(className || '')
-                const lang = match?.[1] || ''
-
-                return !inline ? (
-                  <div className="relative my-3">
-                    <button
-                      onClick={() => handleCopy(code, index)}
-                      className="absolute top-2 right-2 text-xs bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded"
-                    >
-                      {copied === index ? 'Copied!' : <Copy className="w-4 h-4" />}
-                    </button>
-                    <SyntaxHighlighter
-                      language={lang}
-                      style={vscDarkPlus}
-                      customStyle={{
-                        borderRadius: '0.5rem',
-                        padding: '1rem',
-                        backgroundColor: '#1e1e1e',
-                        fontSize: '0.9rem',
-                      }}
-                      {...props}
-                    >
-                      {code}
-                    </SyntaxHighlighter>
-                  </div>
-                ) : (
-                  <code className="bg-gray-200 text-black px-1 py-0.5 rounded">
-                    {code}
-                  </code>
-                )
-              },
-
-              // ✅ Links
-              a({ href, children }) {
-                return (
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 underline hover:opacity-80"
-                  >
-                    {children}
-                  </a>
-                )
-              },
-
-              // ✅ Images
-              img({ src, alt }) {
-                return (
-                  <img
-                    src={src}
-                    alt={alt}
-                    className="max-w-full rounded-lg my-2"
-                  />
-                )
-              },
-
-              // ✅ Tables
-              table({ children }) {
-                return (
-                  <div className="overflow-auto my-3 border rounded-md">
-                    <table className="min-w-full text-sm border-collapse">
-                      {children}
-                    </table>
-                  </div>
-                )
-              },
-              th({ children }) {
-                return (
-                  <th className="border px-3 py-2 text-left font-medium bg-gray-100 dark:bg-gray-800 dark:text-white">
-                    {children}
-                  </th>
-                )
-              },
-              td({ children }) {
-                return (
-                  <td className="border px-3 py-2 dark:text-white">
-                    {children}
-                  </td>
-                )
-              },
-            }}
-          >
-            {sanitizedContent}
-          </ReactMarkdown>
-        )}
-
+        {/* ✅ Feedback and copy icons */}
         {msg.role === 'assistant' && (
-          <div className="mt-2 flex items-center gap-2 text-gray-500">
+          <div className="mt-2 flex items-center gap-3 text-gray-500">
             <button
               onClick={() => handleThumb(index, 'up')}
               className={`hover:text-green-500 ${thumbs[index] === 'up' ? 'text-green-600' : ''}`}
@@ -154,6 +158,13 @@ export default function MessageBubble({ msg, index, thumbs, handleThumb, isLast 
               className={`hover:text-red-500 ${thumbs[index] === 'down' ? 'text-red-600' : ''}`}
             >
               <ThumbsDown className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => handleCopy(sanitizedContent)}
+              className="ml-auto text-xs hover:text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded"
+            >
+              {copied === index ? 'Copied!' : <Copy className="w-4 h-4" />}
             </button>
           </div>
         )}

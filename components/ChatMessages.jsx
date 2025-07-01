@@ -6,16 +6,19 @@ import { Skeleton } from '@/components/ui/skeleton'
 export default function ChatMessages({ messages, loading, thumbs, handleThumb, chatEndRef }) {
   return (
     <div className="p-4 h-[60vh] overflow-y-auto space-y-4 bg-white border rounded">
-      {messages.map((msg, i) => (
-        <MessageBubble
-          key={i}
-          msg={msg}
-          index={i}
-          thumbs={thumbs}
-          handleThumb={handleThumb}
-          isLast={i === messages.length - 1}
-        />
-      ))}
+      {messages
+        ?.filter((msg) => msg && typeof msg === 'object' && msg.content)
+        .map((msg, i) => (
+          <MessageBubble
+            key={i}
+            msg={msg}
+            index={i}
+            thumbs={thumbs}
+            handleThumb={handleThumb}
+            isLast={i === messages.length - 1}
+          />
+        ))}
+
       {loading && (
         <div className="flex justify-start">
           <div className="space-y-2 bg-gray-100 p-3 rounded-lg max-w-[80%]">
@@ -25,6 +28,7 @@ export default function ChatMessages({ messages, loading, thumbs, handleThumb, c
           </div>
         </div>
       )}
+
       <div ref={chatEndRef} />
     </div>
   )

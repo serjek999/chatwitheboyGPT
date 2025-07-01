@@ -222,15 +222,15 @@ export async function POST(req) {
       ? [getModelAndApiKey(true)]
       : useDolphin
         ? [
-            getModelAndApiKey(false, false, true),
-            getModelAndApiKey(false, true, false),
-            getModelAndApiKey(false, false, false),
-          ]
+          getModelAndApiKey(false, false, true),
+          getModelAndApiKey(false, true, false),
+          getModelAndApiKey(false, false, false),
+        ]
         : [
-            getModelAndApiKey(false, false, false),
-            getModelAndApiKey(false, true, false),
-            getModelAndApiKey(false, false, true),
-          ]
+          getModelAndApiKey(false, false, false),
+          getModelAndApiKey(false, true, false),
+          getModelAndApiKey(false, false, true),
+        ]
 
     let finalReply = null
     let lastError = null

@@ -23,12 +23,10 @@ export default function MessageBubble({ msg, index, thumbs, handleThumb, isLast 
   const isWebSearchResult = msg.content.startsWith('**[web]**')
 
   let sanitizedContent = msg.content
-if (hasEboyHeader) sanitizedContent = sanitizedContent.replace('**E-boy**', '')
-if (isWebSearchResult) sanitizedContent = sanitizedContent.replace('**[web]**', '')
-sanitizedContent = sanitizedContent.trim()
+  if (hasEboyHeader) sanitizedContent = sanitizedContent.replace('**E-boy**', '')
+  if (isWebSearchResult) sanitizedContent = sanitizedContent.replace('**[web]**', '')
+  sanitizedContent = sanitizedContent.trim()
 
-
-  // ⛏️ Markdown block parser
   const parseMarkdownToBlocks = (markdown) => {
     const lines = markdown.split('\n')
     const blocks = []
@@ -73,54 +71,47 @@ sanitizedContent = sanitizedContent.trim()
   }
 
   const isUser = msg.role === 'user'
-  const baseStyle = 'relative group w-fit break-words text-sm max-w-full'
-  const userStyle = 'bg-blue-100 text-blue-800 p-3 rounded-lg'
-  const assistantTextStyle = 'text-gray-800'
-  const assistantCardStyle = 'bg-gray-900 text-white p-3 rounded-lg'
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} w-full`}>
       <div
-        className={`${baseStyle} ${
+        className={`relative max-w-[80%] break-words rounded-xl px-4 py-3 shadow-sm ${
           isUser
-            ? userStyle
+            ? 'bg-blue-500 text-white rounded-br-none'
             : sanitizedContent.includes('```')
-            ? assistantCardStyle
-            : assistantTextStyle
+            ? 'bg-zinc-900 text-white rounded-bl-none'
+            : 'bg-gray-100 text-gray-800 rounded-bl-none'
         }`}
         style={{
           overflowWrap: 'break-word',
           wordBreak: 'break-word',
-          maxWidth: '80%',
-          overflowX: 'auto',
         }}
       >
-        {/* ✅ E-boy label */}
+        {/* Label for "E-boy" or Web Search */}
         {msg.role === 'assistant' && (
-  <div className="mb-1 flex items-center space-x-2">
-    {hasEboyHeader && (
-      <>
-        <strong className="font-bold">E-boy</strong>
-        <VerifiedBadge />
-      </>
-    )}
-    {isWebSearchResult && (
-      <span className="text-xs font-semibold bg-blue-100 text-blue-700 px-2 py-1 rounded">
-        🌐 Web Search
-      </span>
-    )}
-  </div>
-)}
+          <div className="mb-2 flex items-center gap-2">
+            {hasEboyHeader && (
+              <>
+                <strong className="text-sm font-semibold">E-boy</strong>
+                <VerifiedBadge />
+              </>
+            )}
+            {isWebSearchResult && (
+              <span className="text-xs font-semibold bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                🌐 Web Search
+              </span>
+            )}
+          </div>
+        )}
 
-
-        {/* ✅ Typing effect only once on the latest assistant message */}
+        {/* Typewriter or Rendered Markdown */}
         {msg.role === 'assistant' && isLast && !hasTyped ? (
           <TypewriterEffect blocks={blocks} speed={8} />
         ) : (
           <div className="prose prose-sm max-w-full dark:prose-invert whitespace-pre-wrap">
             {blocks.map((block, i) =>
               block.type === 'code' ? (
-                <div key={i} className="relative my-3 overflow-x-auto max-w-full rounded">
+                <div key={i} className="relative my-3 overflow-x-auto rounded-md">
                   <SyntaxHighlighter
                     language={block.lang || ''}
                     style={vscDarkPlus}
@@ -131,22 +122,23 @@ sanitizedContent = sanitizedContent.trim()
                       fontSize: '0.9rem',
                       margin: 0,
                       maxHeight: '320px',
-                      overflowX: 'auto',
                     }}
                   >
                     {block.content}
                   </SyntaxHighlighter>
                 </div>
               ) : (
-                <p key={i}>{block.content}</p>
+                <p key={i} className="my-2 leading-relaxed">
+                  {block.content}
+                </p>
               )
             )}
           </div>
         )}
 
-        {/* ✅ Feedback and copy icons */}
+        {/* Feedback + Copy Buttons */}
         {msg.role === 'assistant' && (
-          <div className="mt-2 flex items-center gap-3 text-gray-500">
+          <div className="mt-3 flex items-center gap-3 text-xs text-gray-400">
             <button
               onClick={() => handleThumb(index, 'up')}
               className={`hover:text-green-500 ${thumbs[index] === 'up' ? 'text-green-600' : ''}`}
@@ -159,10 +151,9 @@ sanitizedContent = sanitizedContent.trim()
             >
               <ThumbsDown className="w-4 h-4" />
             </button>
-
             <button
               onClick={() => handleCopy(sanitizedContent)}
-              className="ml-auto text-xs hover:text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded"
+              className="ml-auto flex items-center gap-1 hover:text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded"
             >
               {copied === index ? 'Copied!' : <Copy className="w-4 h-4" />}
             </button>

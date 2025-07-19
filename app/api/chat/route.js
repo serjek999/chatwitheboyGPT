@@ -27,34 +27,34 @@ export async function POST(req) {
 
     const isTechnical = (text) => {
       const keywords = [
-        'equation', 'solve', 'calculate', 'formula', 'physics',
-        'chemistry', 'biology', 'integral', 'derivative', 'explain why',
-        'prove', 'program', 'code', 'algorithm', 'debug', 'function', 'loop',
-        'array', 'syntax', 'runtime', 'logic', 'reasoning'
+        'equation', 'solve', 'calculate', 'formula', 'physics', 'chemistry',
+        'biology', 'integral', 'derivative', 'explain why', 'prove', 'program',
+        'code', 'algorithm', 'debug', 'function', 'loop', 'array', 'syntax',
+        'runtime', 'logic', 'reasoning'
       ]
-      return keywords.some(keyword => text.toLowerCase().includes(keyword))
+      return keywords.some(k => text.toLowerCase().includes(k))
     }
 
     const isWebSearchQuery = (text) => {
-      const commonSearchIntents = [
+      const patterns = [
         'who is', 'what is', 'when is', 'how to', 'top 10', 'best way to',
-        'latest', 'news about', 'recent', 'define', 'explain', 'summary of',
-        'review of', 'compare', 'vs', 'is it true that', 'should i'
+        'latest', 'news about', 'recent', 'define', 'summary of', 'review of',
+        'compare', 'vs', 'is it true that', 'should i'
       ]
-      return commonSearchIntents.some(p => text.toLowerCase().includes(p))
+      return patterns.some(p => text.toLowerCase().includes(p))
     }
 
-    const getModelAndApiKey = (isImage, fallbackToLlama4 = false, useDolphin = false) => {
-      if (isImage || fallbackToLlama4) {
+    const getModelAndApiKey = (isImage, useLlama4 = false, useDeepSeek = false) => {
+      if (isImage || useLlama4) {
         return {
           model: 'meta-llama/llama-4-maverick:free',
           apiKey: process.env.LLAMA4_API_KEY,
         }
       }
-      if (useDolphin) {
+      if (useDeepSeek) {
         return {
-          model: 'cognitivecomputations/dolphin3.0-mistral-24b:free',
-          apiKey: process.env.DOLPHIN_API_KEY,
+          model: 'deepseek/deepseek-r1-0528:free',
+          apiKey: process.env.DEEPSEEK_API_KEY,
         }
       }
       return {
@@ -66,22 +66,34 @@ export async function POST(req) {
     const buildUserMessage = () => {
       if (isImage) {
         return [
-          { type: 'text', text: message || 'Describe this image.' },
+          {
+            type: 'text',
+            text: message || 'Describe this image in full detail.',
+          },
           { type: 'image_url', image_url: { url: imageDataURL } },
         ]
       }
+
+      const lower = message.toLowerCase()
+      if (
+        lower.startsWith('how to') || lower.startsWith('how do i') ||
+        lower.startsWith('how can i') || lower.includes('make') ||
+        lower.includes('recipe')
+      ) {
+        return `Please give a full, step-by-step guide for: ${message}`
+      }
+
       return message
     }
 
     const trySendRequest = async ({ model, apiKey }) => {
       const userMessage = buildUserMessage()
-      const messages = [...history]
+      const messages = [
+        { role: 'system', content: 'Answer with complete, detailed information. No summaries.' },
+        ...history
+      ]
 
-      if (Array.isArray(userMessage)) {
-        messages.push({ role: 'user', content: userMessage })
-      } else {
-        messages.push({ role: 'user', content: userMessage })
-      }
+      messages.push({ role: 'user', content: userMessage })
 
       try {
         const response = await fetch(process.env.OPENROUTER_BASE_URL, {
@@ -90,21 +102,18 @@ export async function POST(req) {
             Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
             'HTTP-Referer': 'http://localhost:3000',
-            'X-Title': 'Chat With Image',
+            'X-Title': 'AI Assistant',
           },
           body: JSON.stringify({ model, messages }),
         })
 
-        const rawText = await response.text()
+        const raw = await response.text()
 
         let data
         try {
-          data = JSON.parse(rawText)
-        } catch (err) {
-          return {
-            success: false,
-            error: `Failed to parse JSON: ${rawText}`,
-          }
+          data = JSON.parse(raw)
+        } catch {
+          return { success: false, error: `Failed to parse model response: ${raw}` }
         }
 
         if (!response.ok) {
@@ -114,14 +123,12 @@ export async function POST(req) {
         }
 
         const msg = data.choices?.[0]?.message
-        if (msg?.content) {
-          return { success: true, reply: msg.content }
-        }
 
+        if (msg?.content) return { success: true, reply: msg.content }
         if (msg?.function_call) {
           return {
             success: true,
-            reply: `🔧 Function call: ${msg.function_call.name}\n📥 Args:\n${msg.function_call.arguments}`,
+            reply: `🔧 Function call: ${msg.function_call.name}\n📥 Args:\n${msg.function_call.arguments}`
           }
         }
 
@@ -129,108 +136,96 @@ export async function POST(req) {
         if (tool) {
           return {
             success: true,
-            reply: `🛠 Tool call: ${tool.name}\n📥 Args:\n${tool.arguments}`,
+            reply: `🛠 Tool call: ${tool.name}\n📥 Args:\n${tool.arguments}`
           }
         }
 
         return {
           success: false,
-          error: `❌ No usable content. Raw:\n\`\`\`json\n${JSON.stringify(msg, null, 2)}\n\`\`\``,
+          error: `❌ Model returned no useful response:\n\`\`\`json\n${JSON.stringify(msg, null, 2)}\n\`\`\``,
         }
 
-      } catch (error) {
-        return {
-          success: false,
-          error: `❌ Network or server error: ${error.message}`,
-        }
+      } catch (err) {
+        return { success: false, error: `❌ Network/server error: ${err.message}` }
       }
     }
 
     const searchWebAndSummarize = async (query, model, apiKey) => {
       try {
-        const searchResponse = await fetch(
-          `https://serpapi.com/search.json?q=${encodeURIComponent(query)}&num=5&api_key=${process.env.SERPAPI_KEY}`
-        )
-        const data = await searchResponse.json()
+        const res = await fetch(`https://serpapi.com/search.json?q=${encodeURIComponent(query)}&num=5&api_key=${process.env.SERPAPI_KEY}`)
+        const data = await res.json()
 
-        const usableResults = (data.organic_results || [])
+        const results = (data.organic_results || [])
           .filter(r => r.title && r.snippet)
           .map(r => `- ${r.title.trim()}: ${r.snippet.trim()}`)
 
-        const snippets = usableResults.join('\n')
+        const snippets = results.join('\n')
+        if (results.length < 2) return '❌ Not enough data from web search.'
 
-        if (!snippets || usableResults.length < 2) {
-          return '❌ Not enough search data to summarize.'
-        }
+        const prompt = `Using the following results for "${query}", explain in full:\n\n${snippets}`
 
-        const summaryPrompt = `Summarize the following search results for the query "${query}". Provide a clear and concise answer suitable for a general audience:\n\n${snippets}`
-
-        const response = await fetch(process.env.OPENROUTER_BASE_URL, {
+        const summaryRes = await fetch(process.env.OPENROUTER_BASE_URL, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
             'HTTP-Referer': 'http://localhost:3000',
-            'X-Title': 'Web Search Summary',
+            'X-Title': 'Web Search',
           },
           body: JSON.stringify({
             model,
             messages: [
-              { role: 'system', content: 'You are a helpful assistant that summarizes web search results accurately and clearly.' },
-              { role: 'user', content: summaryPrompt },
-            ]
+              { role: 'system', content: 'Explain in full detail using the search data.' },
+              { role: 'user', content: prompt },
+            ],
+            temperature: 0.7,
+            max_tokens: 2048
           }),
         })
 
-        const json = await response.json()
+        const json = await summaryRes.json()
         const reply = json.choices?.[0]?.message?.content
 
-        if (!reply || reply.length < 10) {
-          return '❌ Summary was too short or missing.'
-        }
+        return reply?.length > 10 ? reply : '❌ Summary too short.'
 
-        return reply
       } catch (err) {
         console.error('🌐 Web search error:', err)
-        return '❌ Web search failed. Please try again.'
+        return '❌ Web search failed.'
       }
     }
 
-    const useDolphin = isTechnical(message)
+    const useDeepSeek = isTechnical(message)
     const needsWebSearch = isWebSearchQuery(message)
 
     if (needsWebSearch && !isImage) {
       const { model, apiKey } = getModelAndApiKey(false, true, false)
       const reply = await searchWebAndSummarize(message, model, apiKey)
 
-      // Fallback to model if summary is bad
       if (reply.startsWith('❌')) {
-        const result = await trySendRequest({ model, apiKey })
+        const fallback = await trySendRequest({ model, apiKey })
         return NextResponse.json({
-          reply: result.success
-            ? result.reply
-            : `❌ Failed to get answer from model.\n\n${result.error}`,
+          reply: fallback.success
+            ? fallback.reply
+            : `❌ Fallback model failed:\n${fallback.error}`,
         })
       }
 
-      return NextResponse.json({
-        reply: `**[web]**\n${reply}`,
-      })
+      return NextResponse.json({ reply: `**[web]**\n${reply}` })
     }
 
     const attemptOrder = isImage
       ? [getModelAndApiKey(true)]
-      : useDolphin
+      : useDeepSeek
         ? [
-          getModelAndApiKey(false, false, true),
-          getModelAndApiKey(false, true, false),
-          getModelAndApiKey(false, false, false),
-        ]
+            getModelAndApiKey(false, false, true), // deepseek
+            getModelAndApiKey(false, true, false), // llama4 fallback
+            getModelAndApiKey(false, false, false), // scout
+          ]
         : [
-          getModelAndApiKey(false, false, false),
-          getModelAndApiKey(false, true, false),
-          getModelAndApiKey(false, false, true),
-        ]
+            getModelAndApiKey(false, false, false), // scout
+            getModelAndApiKey(false, true, false), // llama4 fallback
+            getModelAndApiKey(false, false, true), // deepseek
+          ]
 
     let finalReply = null
     let lastError = null
@@ -246,13 +241,13 @@ export async function POST(req) {
     }
 
     return NextResponse.json({
-      reply: finalReply || `❌ All model attempts failed.\n\n${lastError}`,
+      reply: finalReply || `❌ All models failed. Last error:\n${lastError}`,
     })
 
-  } catch (error) {
-    console.error('🔥 Chat API error:', error)
+  } catch (err) {
+    console.error('🔥 Server error:', err)
     return NextResponse.json({
-      reply: '❌ Server error. Please try again later.',
+      reply: '❌ Unexpected server error. Please try again later.',
     })
   }
 }

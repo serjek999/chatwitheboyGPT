@@ -21,10 +21,10 @@ export default function ChatMessages({ messages, loading, thumbs, handleThumb, c
 
       {loading && (
         <div className="flex justify-start">
-          <div className="space-y-2 bg-gray-100 p-3 rounded-lg max-w-[80%]">
-            <Skeleton className="h-5 w-[80px]" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-[90%]" />
+          <div className="flex flex-col space-y-1">
+            <Skeleton className="h-3 w-[100px] rounded-full bg-gray-300" />
+            <Skeleton className="h-3 w-[80px] rounded-full bg-gray-300" />
+            <Skeleton className="h-3 w-[50px] rounded-full bg-gray-300" />
           </div>
         </div>
       )}

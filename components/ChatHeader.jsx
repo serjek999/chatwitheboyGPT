@@ -9,7 +9,7 @@ export default function ChatHeader({ user, onLogout }) {
   const router = useRouter()
 
   return (
-    <div className="flex justify-between items-center">
+    <div className="flex justify-between items-center sticky-mobile-header">
       <h1 className="text-2xl font-bold">E-boy GPT</h1>
       <div className="flex items-center space-x-4">
         <div className="text-sm text-right">

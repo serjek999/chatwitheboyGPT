@@ -198,37 +198,50 @@ export async function POST(req) {
     const needsWebSearch = isWebSearchQuery(message)
 
     if (needsWebSearch && !isImage) {
-      const { model, apiKey } = getModelAndApiKey(false, true, false)
-      const reply = await searchWebAndSummarize(message, model, apiKey)
-
-      if (reply.startsWith('❌')) {
-        const fallback = await trySendRequest({ model, apiKey })
-        return NextResponse.json({
-          reply: fallback.success
-            ? fallback.reply
-            : `❌ Fallback model failed:\n${fallback.error}`,
-        })
+      // Try all models in fallback order for web search
+      const attemptOrder = [
+        getModelAndApiKey(false, true, false), // llama4
+        getModelAndApiKey(false, false, true), // deepseek
+        getModelAndApiKey(false, false, false), // scout
+      ];
+      let finalReply = null;
+      const attemptErrors = [];
+      for (const attempt of attemptOrder) {
+        const reply = await searchWebAndSummarize(message, attempt.model, attempt.apiKey);
+        if (!reply.startsWith('❌')) {
+          finalReply = `**[web]**\n${reply}`;
+          break;
+        } else {
+          attemptErrors.push({ model: attempt.model, error: reply });
+        }
       }
-
-      return NextResponse.json({ reply: `**[web]**\n${reply}` })
+      if (finalReply) {
+        return NextResponse.json({ reply: finalReply });
+      } else {
+        const errorReport = attemptErrors.map((e, i) => `#${i + 1}: ${e.model}\n${e.error}`).join('\n\n');
+        return NextResponse.json({
+          reply: `❌ All models failed for web search.\n\n${errorReport}`,
+        });
+      }
     }
 
     const attemptOrder = isImage
       ? [getModelAndApiKey(true)]
       : useDeepSeek
         ? [
-            getModelAndApiKey(false, false, true), // deepseek
-            getModelAndApiKey(false, true, false), // llama4 fallback
-            getModelAndApiKey(false, false, false), // scout
-          ]
+          getModelAndApiKey(false, false, true), // deepseek
+          getModelAndApiKey(false, true, false), // llama4 fallback
+          getModelAndApiKey(false, false, false), // scout
+        ]
         : [
-            getModelAndApiKey(false, false, false), // scout
-            getModelAndApiKey(false, true, false), // llama4 fallback
-            getModelAndApiKey(false, false, true), // deepseek
-          ]
+          getModelAndApiKey(false, false, false), // scout
+          getModelAndApiKey(false, true, false), // llama4 fallback
+          getModelAndApiKey(false, false, true), // deepseek
+        ]
 
     let finalReply = null
     let lastError = null
+    const attemptErrors = [];
 
     for (const attempt of attemptOrder) {
       const result = await trySendRequest(attempt)
@@ -237,12 +250,21 @@ export async function POST(req) {
         break
       } else {
         lastError = result.error
+        attemptErrors.push({ model: attempt.model, error: result.error });
       }
     }
 
-    return NextResponse.json({
-      reply: finalReply || `❌ All models failed. Last error:\n${lastError}`,
-    })
+    if (finalReply) {
+      return NextResponse.json({
+        reply: finalReply,
+      })
+    } else {
+      // Build a detailed error report
+      const errorReport = attemptErrors.map((e, i) => `#${i + 1}: ${e.model}\n${e.error}`).join('\n\n')
+      return NextResponse.json({
+        reply: `❌ All models failed.\n\n${errorReport}`,
+      })
+    }
 
   } catch (err) {
     console.error('🔥 Server error:', err)
